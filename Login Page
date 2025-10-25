@@ -1,0 +1,97 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class LoginPage extends JFrame {
+    private JTextField txtUsername;
+    private JPasswordField txtPassword;
+
+    public LoginPage() {
+        setTitle("Vehicle Service Centre Login");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(450, 300);
+        setLocationRelativeTo(null);
+        setResizable(false);
+
+        // 🌈 Gradient background panel
+        JPanel panel = new JPanel() {
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                Color c1 = new Color(0, 102, 204);
+                Color c2 = new Color(0, 204, 153);
+                GradientPaint gp = new GradientPaint(0, 0, c1, 0, getHeight(), c2);
+                g2.setPaint(gp);
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        panel.setLayout(null);
+        add(panel);
+
+        JLabel title = new JLabel("Vehicle Service Centre");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        title.setForeground(Color.WHITE);
+        title.setBounds(90, 30, 300, 40);
+        panel.add(title);
+
+        JLabel userLabel = new JLabel("Username:");
+        userLabel.setForeground(Color.WHITE);
+        userLabel.setBounds(60, 100, 100, 25);
+        panel.add(userLabel);
+
+        txtUsername = new JTextField();
+        txtUsername.setBounds(160, 100, 200, 25);
+        panel.add(txtUsername);
+
+        JLabel passLabel = new JLabel("Password:");
+        passLabel.setForeground(Color.WHITE);
+        passLabel.setBounds(60, 140, 100, 25);
+        panel.add(passLabel);
+
+        txtPassword = new JPasswordField();
+        txtPassword.setBounds(160, 140, 200, 25);
+        panel.add(txtPassword);
+
+        JButton btnLogin = new JButton("Login");
+        btnLogin.setBackground(new Color(255, 255, 255));
+        btnLogin.setForeground(new Color(0, 102, 204));
+        btnLogin.setBounds(180, 190, 100, 30);
+        panel.add(btnLogin);
+
+        // Action listener for login
+        btnLogin.addActionListener(e -> authenticateUser());
+    }
+
+    private void authenticateUser() {
+        String username = txtUsername.getText();
+        String password = new String(txtPassword.getPassword());
+
+        if (username.isEmpty() || password.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Please fill all fields!", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT * FROM users WHERE username=? AND password=?")) {
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                JOptionPane.showMessageDialog(this, "Login successful!");
+                dispose();
+                new Dashboard().setVisible(true);
+            } else {
+                JOptionPane.showMessageDialog(this, "Invalid credentials!", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> new LoginPage().setVisible(true));
+    }
+}
