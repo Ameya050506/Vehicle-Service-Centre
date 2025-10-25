@@ -1,0 +1,404 @@
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+/**
+ * MiniProjectApp.java
+ * - Input fields and action buttons are placed at the top (compact)
+ * - Output table (JTable) placed below and occupies remaining space
+ * - Styled UI, CRUD + Advanced Reports, ResultSet -> JTable rendering
+ *
+ * Replace your existing MiniProjectApp.java with this file.
+ */
+public class MiniProjectApp extends JFrame {
+
+    private Connection conn;
+
+    public MiniProjectApp(String defaultTab) {
+        // Look & feel
+        try {
+            UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+        } catch (Exception ignored) {}
+
+        setTitle("🚗 Vehicle Service Centre - Mini Project");
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setSize(1150, 700);
+        setLocationRelativeTo(null);
+        getContentPane().setBackground(new Color(245, 247, 250));
+
+        // DB connection
+        try {
+            conn = DBConnection.getConnection();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database connection failed: " + e.getMessage(),
+                    "DB Error", JOptionPane.ERROR_MESSAGE);
+            conn = null;
+        }
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(new Font("Segoe UI", Font.BOLD, 15));
+
+        tabs.addTab("Customer", createEntityPanel(
+                "Customer", "customer_id",
+                new String[]{"customer_id", "name", "phone_number", "email"},
+                "INSERT INTO Customer (customer_id,name,phone_number,email) VALUES (?,?,?,?)",
+                "UPDATE Customer SET name=?,phone_number=?,email=? WHERE customer_id=?",
+                "DELETE FROM Customer WHERE customer_id=?",
+                "SELECT * FROM Customer WHERE customer_id=?",
+                "SELECT * FROM Customer"
+        ));
+
+        tabs.addTab("Vehicle", createEntityPanel(
+                "Vehicle", "vehicle_id",
+                new String[]{"vehicle_id", "registration_number", "model"},
+                "INSERT INTO Vehicle (vehicle_id,registration_number,model) VALUES (?,?,?)",
+                "UPDATE Vehicle SET registration_number=?,model=? WHERE vehicle_id=?",
+                "DELETE FROM Vehicle WHERE vehicle_id=?",
+                "SELECT * FROM Vehicle WHERE vehicle_id=?",
+                "SELECT * FROM Vehicle"
+        ));
+
+        tabs.addTab("Service Appointment", createEntityPanel(
+                "Service_Appointment", "appointment_id",
+                new String[]{"appointment_id", "vehicle_id", "appointment_date", "status"},
+                "INSERT INTO Service_Appointment (appointment_id,vehicle_id,appointment_date,status) VALUES (?,?,?,?)",
+                "UPDATE Service_Appointment SET vehicle_id=?,appointment_date=?,status=? WHERE appointment_id=?",
+                "DELETE FROM Service_Appointment WHERE appointment_id=?",
+                "SELECT * FROM Service_Appointment WHERE appointment_id=?",
+                "SELECT * FROM Service_Appointment"
+        ));
+
+        tabs.addTab("Service History", createEntityPanel(
+                "Service_History", "service_id",
+                new String[]{"service_id", "vehicle_id", "service_date", "description"},
+                "INSERT INTO Service_History (service_id,vehicle_id,service_date,description) VALUES (?,?,?,?)",
+                "UPDATE Service_History SET vehicle_id=?,service_date=?,description=? WHERE service_id=?",
+                "DELETE FROM Service_History WHERE service_id=?",
+                "SELECT * FROM Service_History WHERE service_id=?",
+                "SELECT * FROM Service_History"
+        ));
+
+        tabs.addTab("Payment", createEntityPanel(
+                "Payment", "payment_id",
+                new String[]{"payment_id", "invoice_id", "payment_date", "payment_method", "amount"},
+                "INSERT INTO Payment (payment_id,invoice_id,payment_date,payment_method,amount) VALUES (?,?,?,?,?)",
+                "UPDATE Payment SET invoice_id=?,payment_date=?,payment_method=?,amount=? WHERE payment_id=?",
+                "DELETE FROM Payment WHERE payment_id=?",
+                "SELECT * FROM Payment WHERE payment_id=?",
+                "SELECT * FROM Payment"
+        ));
+
+        tabs.addTab("Reports", createAdvancedReportPanel());
+
+        int tabIndex = switch (defaultTab) {
+            case "Customer" -> 0;
+            case "Vehicle" -> 1;
+            case "Service Appointment" -> 2;
+            case "Service History" -> 3;
+            case "Payment" -> 4;
+            case "Reports" -> 5;
+            default -> 0;
+        };
+        tabs.setSelectedIndex(tabIndex);
+
+        getContentPane().add(tabs);
+    }
+
+    /**
+     * Creates an entity panel where:
+     * - Top: compact input fields + action buttons (Insert, Update, Delete, Search, Search All)
+     * - Bottom/Center: JTable that shows results (fills remaining space)
+     */
+    private JPanel createEntityPanel(String tableName, String keyColumn, String[] columns,
+                                     String insertSQL, String updateSQL, String deleteSQL,
+                                     String searchSQL, String viewAllSQL) {
+
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        // Title bar
+        JLabel title = new JLabel(tableName + " Management");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        title.setForeground(new Color(0, 102, 204));
+        title.setHorizontalAlignment(SwingConstants.CENTER);
+        panel.add(title, BorderLayout.NORTH);
+
+        // === Top compact area: inputs + buttons ===
+        JPanel topContainer = new JPanel(new BorderLayout(8, 8));
+        topContainer.setBackground(Color.WHITE);
+        // Inputs grid
+        JPanel inputs = new JPanel(new GridLayout(0, columns.length, 8, 8));
+        inputs.setBackground(Color.WHITE);
+        JTextField[] fields = new JTextField[columns.length];
+        for (int i = 0; i < columns.length; i++) {
+            JPanel single = new JPanel(new BorderLayout(4, 4));
+            single.setBackground(Color.WHITE);
+            JLabel lbl = new JLabel(columns[i].toUpperCase() + ":");
+            lbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            lbl.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+            fields[i] = new JTextField();
+            fields[i].setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            single.add(lbl, BorderLayout.NORTH);
+            single.add(fields[i], BorderLayout.CENTER);
+            inputs.add(single);
+        }
+        topContainer.add(inputs, BorderLayout.CENTER);
+
+        // Buttons row (compact)
+        JPanel buttonsRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
+        buttonsRow.setBackground(Color.WHITE);
+        JButton btnInsert = createStyledButton("Insert", new Color(0, 153, 51));
+        JButton btnUpdate = createStyledButton("Update", new Color(0, 102, 204));
+        JButton btnDelete = createStyledButton("Delete", new Color(204, 0, 0));
+        JButton btnSearch = createStyledButton("Search", new Color(255, 153, 51));
+        JButton btnViewAll = createStyledButton("Search All", new Color(102, 102, 255));
+        buttonsRow.add(btnInsert);
+        buttonsRow.add(btnUpdate);
+        buttonsRow.add(btnDelete);
+        buttonsRow.add(btnSearch);
+        buttonsRow.add(btnViewAll);
+
+        topContainer.add(buttonsRow, BorderLayout.SOUTH);
+
+        panel.add(topContainer, BorderLayout.NORTH);
+
+        // === Table below (fills rest of panel) ===
+        JTable table = new JTable();
+        table.setFont(new Font("Consolas", Font.PLAIN, 14));
+        table.setRowHeight(24);
+        JScrollPane tableScroll = new JScrollPane(table);
+        panel.add(tableScroll, BorderLayout.CENTER);
+
+        // Button actions
+        btnInsert.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            executeUpdate(insertSQL, fields, tableName);
+            executeView(viewAllSQL, table);
+        });
+
+        btnUpdate.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            executeUpdate(updateSQL, fields, tableName);
+            executeView(viewAllSQL, table);
+        });
+
+        btnDelete.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            executeDelete(deleteSQL, fields, tableName);
+            executeView(viewAllSQL, table);
+        });
+
+        btnSearch.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            executeSearch(searchSQL, fields, keyColumn, table);
+        });
+
+        btnViewAll.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            executeView(viewAllSQL, table);
+        });
+
+        // initial load small set to avoid huge empty space
+        if (conn != null) {
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    executeView(viewAllSQL + " LIMIT 50", table);
+                } catch (Exception ignored) {}
+            });
+        }
+
+        return panel;
+    }
+
+    // Styled button (simple hover darker)
+    private JButton createStyledButton(String text, Color bgColor) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        btn.setForeground(Color.WHITE);
+        btn.setBackground(bgColor);
+        btn.setFocusPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setBorder(BorderFactory.createEmptyBorder(8, 18, 8, 18));
+        btn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) { btn.setBackground(bgColor.darker()); }
+            public void mouseExited(java.awt.event.MouseEvent evt) { btn.setBackground(bgColor); }
+        });
+        return btn;
+    }
+
+    // Generic DB operations
+    private void executeUpdate(String sql, JTextField[] fields, String tableName) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < fields.length; i++) {
+                String v = fields[i].getText().trim();
+                ps.setString(i + 1, v.isEmpty() ? null : v);
+            }
+            int rows = ps.executeUpdate();
+            JOptionPane.showMessageDialog(this, rows + " row(s) affected in " + tableName);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "SQL Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void executeDelete(String sql, JTextField[] fields, String tableName) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fields[0].getText().trim());
+            int rows = ps.executeUpdate();
+            JOptionPane.showMessageDialog(this, rows + " row(s) deleted from " + tableName);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "SQL Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void executeSearch(String sql, JTextField[] fields, String keyColumn, JTable table) {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fields[0].getText().trim());
+            ResultSet rs = ps.executeQuery();
+            buildTable(rs, table);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "SQL Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void executeView(String sql, JTable table) {
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            buildTable(rs, table);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "SQL Error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void showNoDb() {
+        JOptionPane.showMessageDialog(this, "Database connection is not available.", "No DB", JOptionPane.WARNING_MESSAGE);
+    }
+
+    // Convert ResultSet to JTable model
+    private void buildTable(ResultSet rs, JTable table) throws SQLException {
+        ResultSetMetaData meta = rs.getMetaData();
+        DefaultTableModel model = new DefaultTableModel();
+        int cols = meta.getColumnCount();
+        for (int i = 1; i <= cols; i++) model.addColumn(meta.getColumnLabel(i));
+        while (rs.next()) {
+            Object[] row = new Object[cols];
+            for (int i = 1; i <= cols; i++) row[i - 1] = rs.getObject(i);
+            model.addRow(row);
+        }
+        table.setModel(model);
+    }
+
+    // Advanced Reports panel: top compact controls, table below (no big empty space)
+    private JPanel createAdvancedReportPanel() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        JLabel title = new JLabel("📈 Analytical Reports", SwingConstants.CENTER);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        title.setForeground(new Color(0, 102, 204));
+        panel.add(title, BorderLayout.NORTH);
+
+        // top compact controls
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 6));
+        top.setBackground(Color.WHITE);
+        String[] reports = {
+                "1. Total Services per Vehicle",
+                "2. Customer with Most Vehicles",
+                "3. Recent Appointments (Last 7 Days)",
+                "4. Most Common Payment Method",
+                "5. Average Services per Vehicle",
+                "6. Vehicles Without Recent Service (30+ days)",
+                "7. Total Payments by Date",
+                "8. Customers with Pending Appointments"
+        };
+        JComboBox<String> combo = new JComboBox<>(reports);
+        combo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        JButton run = createStyledButton("Run Report", new Color(0, 153, 204));
+        top.add(combo);
+        top.add(run);
+        panel.add(top, BorderLayout.CENTER);
+
+        // table below
+        JTable reportTable = new JTable();
+        reportTable.setFont(new Font("Consolas", Font.PLAIN, 14));
+        reportTable.setRowHeight(24);
+        JScrollPane scroll = new JScrollPane(reportTable);
+        scroll.setPreferredSize(new Dimension(1120, 440));
+        panel.add(scroll, BorderLayout.SOUTH);
+
+        run.addActionListener(e -> {
+            if (conn == null) { showNoDb(); return; }
+            int idx = combo.getSelectedIndex();
+            String query;
+            switch (idx) {
+                case 0:
+                    query = "SELECT v.vehicle_id, v.registration_number, COUNT(s.service_id) AS total_services " +
+                            "FROM Vehicle v LEFT JOIN Service_History s ON v.vehicle_id = s.vehicle_id " +
+                            "GROUP BY v.vehicle_id, v.registration_number ORDER BY total_services DESC;";
+                    break;
+                case 1:
+                    query = "SELECT c.customer_id, c.name, COUNT(v.vehicle_id) AS vehicle_count " +
+                            "FROM Customer c LEFT JOIN Vehicle v ON c.customer_id = v.customer_id " +
+                            "GROUP BY c.customer_id, c.name ORDER BY vehicle_count DESC LIMIT 1;";
+                    break;
+                case 2:
+                    query = "SELECT appointment_id, vehicle_id, appointment_date, status FROM Service_Appointment " +
+                            "WHERE appointment_date >= CURDATE() - INTERVAL 7 DAY ORDER BY appointment_date DESC;";
+                    break;
+                case 3:
+                    query = "SELECT payment_method, COUNT(*) AS count_method FROM Payment GROUP BY payment_method ORDER BY count_method DESC;";
+                    break;
+                case 4:
+                    query = "SELECT v.vehicle_id, v.registration_number, COUNT(s.service_id) AS service_count " +
+                            "FROM Vehicle v LEFT JOIN Service_History s ON v.vehicle_id = s.vehicle_id " +
+                            "GROUP BY v.vehicle_id, v.registration_number;";
+                    break;
+                case 5:
+                    query = "SELECT v.vehicle_id, v.registration_number, MAX(s.service_date) AS last_service_date " +
+                            "FROM Vehicle v LEFT JOIN Service_History s ON v.vehicle_id = s.vehicle_id " +
+                            "GROUP BY v.vehicle_id, v.registration_number " +
+                            "HAVING (MAX(s.service_date) IS NULL) OR (MAX(s.service_date) < CURDATE() - INTERVAL 30 DAY);";
+                    break;
+                case 6:
+                    query = "SELECT payment_date, COUNT(payment_id) AS total_payments, SUM(COALESCE(amount,0)) AS total_amount " +
+                            "FROM Payment GROUP BY payment_date ORDER BY payment_date DESC;";
+                    break;
+                case 7:
+                    query = "SELECT DISTINCT c.customer_id, c.name, sa.appointment_id, sa.appointment_date, sa.status " +
+                            "FROM Customer c JOIN Vehicle v ON c.customer_id = v.customer_id " +
+                            "JOIN Service_Appointment sa ON v.vehicle_id = sa.vehicle_id WHERE sa.status='Pending' " +
+                            "ORDER BY sa.appointment_date DESC;";
+                    break;
+                default:
+                    query = "";
+            }
+
+            if (query.isBlank()) {
+                JOptionPane.showMessageDialog(this, "No query defined.", "Info", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(query)) {
+                buildTable(rs, reportTable);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "SQL Error: " + ex.getMessage() + "\nHint: verify table/column names with DESC <table>.",
+                        "Query Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        return panel;
+    }
+
+    // optional main for quick testing
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            MiniProjectApp app = new MiniProjectApp("Customer");
+            app.setVisible(true);
+        });
+    }
+}
